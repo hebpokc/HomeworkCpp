@@ -24,11 +24,13 @@
 #include <iostream>
 #include <algorithm>
 #include <iomanip>
+#include <mutex>
 
 
 class Integral {
 private:
     int a, b, n, tn;
+    std::mutex mtx;
 
 public:
     Integral(int& argc, char** argv) {
@@ -43,14 +45,40 @@ public:
 
 
     static double integralFunction(double x) {
-        // тут нужно реализовать функцию интеграла S(a, b) = (1+e^x)^0.5 dx
-        return 0;
+        return std::sqrt(1 + std::exp(x));
     }
 
 
     double calculateIntegral() {
-        // в зависимости от количество потоков (tn) реализуйте подсчёт интеграла
-        return 0;
+        double total = 0.0;
+        std::vector<std::thread> threads;
+        int n_per_thread = n / tn;
+        double h = static_cast<double>(b - a) / n;
+
+        for (int t = 0; t < tn; ++t) {
+            int start = t * n_per_thread;
+            int end = (t == tn - 1) ? n : (t + 1) * n_per_thread;
+
+            threads.emplace_back([&, start, end, h, t]() {
+                double local_sum = 0.0;
+                for (int i = start; i < end; ++i) {
+                    double x_i = a + i * h;
+                    double x_next = a + (i + 1) * h;
+                    local_sum += (integralFunction(x_i) + integralFunction(x_next)) * h / 2.0;
+                }
+
+                std::lock_guard<std::mutex> lock(mtx);
+                total += local_sum;
+            });
+    }
+
+    for (auto& thread : threads) {
+            if (thread.joinable()) {
+                thread.join();
+            }
+        }
+
+        return total;
     }
 
 };
